@@ -1,0 +1,15 @@
+C:\Users\KECKAX\RiderProjects\LogParser\LogParser\bin\Debug\net6.0\LogParser.exe
+C:\Users\KECKAX\RiderProjects\LogParser\LogParser\bin\Debug\net6.0\LogParser.deps.json
+C:\Users\KECKAX\RiderProjects\LogParser\LogParser\bin\Debug\net6.0\LogParser.runtimeconfig.json
+C:\Users\KECKAX\RiderProjects\LogParser\LogParser\bin\Debug\net6.0\LogParser.dll
+C:\Users\KECKAX\RiderProjects\LogParser\LogParser\bin\Debug\net6.0\LogParser.pdb
+C:\Users\KECKAX\RiderProjects\LogParser\LogParser\obj\Debug\net6.0\LogParser.csproj.AssemblyReference.cache
+C:\Users\KECKAX\RiderProjects\LogParser\LogParser\obj\Debug\net6.0\LogParser.GeneratedMSBuildEditorConfig.editorconfig
+C:\Users\KECKAX\RiderProjects\LogParser\LogParser\obj\Debug\net6.0\LogParser.AssemblyInfoInputs.cache
+C:\Users\KECKAX\RiderProjects\LogParser\LogParser\obj\Debug\net6.0\LogParser.AssemblyInfo.cs
+C:\Users\KECKAX\RiderProjects\LogParser\LogParser\obj\Debug\net6.0\LogParser.csproj.CoreCompileInputs.cache
+C:\Users\KECKAX\RiderProjects\LogParser\LogParser\obj\Debug\net6.0\LogParser.dll
+C:\Users\KECKAX\RiderProjects\LogParser\LogParser\obj\Debug\net6.0\refint\LogParser.dll
+C:\Users\KECKAX\RiderProjects\LogParser\LogParser\obj\Debug\net6.0\LogParser.pdb
+C:\Users\KECKAX\RiderProjects\LogParser\LogParser\obj\Debug\net6.0\LogParser.genruntimeconfig.cache
+C:\Users\KECKAX\RiderProjects\LogParser\LogParser\obj\Debug\net6.0\ref\LogParser.dll
