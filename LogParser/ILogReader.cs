@@ -1,11 +1,9 @@
 ﻿namespace LogParser;
 
 public interface ILogReader {
-    public char? NextChar(); // returns null if no char available
+    public char NextChar(); // Waits Sync until chars available
 
-    public bool SkipChars(int amount); // returns false if no char available
+    public void SkipChars(int amount); // Waits Sync until chars available
 
-    public string[] ReadOut(int[] breaks);
-
-    public Task NextChunkReadyAsync();
+    public string ReadOut(int count);
 }

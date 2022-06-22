@@ -1,4 +1,6 @@
-﻿using System.Text;
+﻿using System.Collections.Concurrent;
+using System.Diagnostics;
+using System.Text;
 
 namespace LogParser;
 
@@ -7,119 +9,128 @@ public class LogReader : ILogReader {
 
     private string _name;
     private string _location;
-    private FileStream _stream;
-    private FileSystemWatcher _watcher;
+    private int _start = 0; // Used in readOut
     private int _position = 0;
-    private bool _fileContinues = true;
+
+    private readonly ConcurrentQueue<string> _chunksConcurrent;
+    private readonly ManualResetEvent _readerWait, _chunkAvailable, _readAvailable;
+
     private LinkedList<string> _chunks;
     private LinkedListNode<string>? _chunk;
-    private TaskCompletionSource _waiter;
-    private bool _reading;
 
-    //private int _chunksAhead = 0;
 
     public LogReader(string location, string fileName) {
         _name = fileName;
         _location = location;
 
+        _chunksConcurrent = new ConcurrentQueue<string>();
+        _readerWait = new ManualResetEvent(false);
+        _chunkAvailable = new ManualResetEvent(false);
+        _readAvailable = new ManualResetEvent(false);
+
         _chunks = new LinkedList<string>();
 
-        _stream = new FileStream(
-            _location + _name,
+        FileSystemWatcher watcher = new FileSystemWatcher();
+        watcher.Path = _location;
+        watcher.NotifyFilter = NotifyFilters.Size |
+                               NotifyFilters.CreationTime |
+                               NotifyFilters.FileName |
+                               NotifyFilters.LastWrite;
+        watcher.Filter = _name;
+        watcher.Changed += OnChanged;
+        watcher.EnableRaisingEvents = true;
+
+        Thread readerThread = new Thread(() => ReadThread(_location + _name));
+        readerThread.Start();
+    }
+
+    private void ReadThread(string path) {
+        byte[] buffer = new byte[4096];
+        FileStream stream = new FileStream(
+            path,
             FileMode.Open,
             FileAccess.Read,
             FileShare.ReadWrite,
             bufferSize: 4096,
-            useAsync: true);
+            useAsync: false);
 
-        _watcher = new FileSystemWatcher();
-        _watcher.Path = _location;
-        _watcher.NotifyFilter = NotifyFilters.Size |
-                                NotifyFilters.CreationTime |
-                                NotifyFilters.FileName |
-                                NotifyFilters.LastWrite;
-        //_watcher.Filter = _name;
-        _watcher.Changed += OnChanged;
-        _watcher.EnableRaisingEvents = true;
-        _waiter = new TaskCompletionSource();
-        ReadChunk();
+        while (true) {
+            int amount = stream.Read(buffer, 0, 4096);
+            while (amount == 0) {
+                // Uncomment this line for profiling
+                // Environment.Exit(0);
+                // Comment this line for actual use
+                _readAvailable.WaitOne();
+                amount = stream.Read(buffer, 0, 4096);
+            }
+
+            _chunksConcurrent.Enqueue(Encoding.UTF8.GetString(buffer, 0, amount));
+            _chunkAvailable.Set();
+            _chunkAvailable.Reset();
+
+            if (_chunksConcurrent.Count > 2) {
+                _readerWait.WaitOne();
+            }
+        }
     }
 
     private void OnChanged(object source, FileSystemEventArgs e) {
-        _fileContinues = true;
-        ReadChunk();
+        _readAvailable.Set();
+        _readAvailable.Reset();
     }
 
-    private async Task<bool> ReadChunk() {
-        _reading = true;
-        byte[] buffer = new byte[4096];
-
-        int amount = await _stream.ReadAsync(buffer, 0, buffer.Length);
-        if (amount == 0) {
-            _fileContinues = false;
-            _reading = false;
-            return false;
+    private void NextChunk() {
+        while (_chunksConcurrent.IsEmpty) {
+            _chunkAvailable.WaitOne();
         }
 
-        _chunks.AddLast(Encoding.UTF8.GetString(buffer, 0, amount));
-        _chunk ??= _chunks.Last;
+        string? chunk;
+        if (!_chunksConcurrent.TryDequeue(out chunk)) {
+            throw new Exception("TryDequeue Failed");
+        }
 
-        _waiter.SetResult();
-        _waiter = new TaskCompletionSource();
-        _reading = false;
-        if (_chunk!.Next == null) ReadChunk();
-        return true;
+        _readerWait.Set();
+        _readerWait.Reset();
+        _chunks.AddLast(chunk);
+        _chunk = _chunks.Last;
+        _position = 0;
     }
 
-    public char? NextChar() {
-        if (_chunk == null) {
-            if (!_reading && _fileContinues) ReadChunk();
-            return null;
+    public char NextChar() {
+        if (_chunk == null || _position >= _chunk!.Value.Length) {
+            NextChunk();
         }
 
-        if (_position < _chunk.Value.Length) {
-            char c = _chunk.Value[_position];
-            _position++;
-            return c;
-        }
-        if (!_reading && _fileContinues) ReadChunk();
-
-        LinkedListNode<string>? next = _chunk.Next;
-        if (next == null) {
-            return null;
-        }
-
-        _chunk = next;
-
-        _position = 1;
-        return _chunk.Value[0];
+        char c = _chunk!.Value[_position];
+        _position++;
+        return c;
     }
 
     // This returns true if it can skip over <amount> chars
     // NextChar is NOT guaranteed to be available 
-    public bool SkipChars(int amount) {
+    public void SkipChars(int amount) {
         _position += amount;
-        if (_position <= _chunk.Value.Length) {
-            return true;
+        if (_chunk == null || _position >= _chunk!.Value.Length) {
+            NextChunk();
         }
-
-        LinkedListNode<string>? next = _chunk.Next;
-        if (next == null) {
-            _position -= amount;
-            return false;
-        }
-
-        _position -= _chunk.Value.Length;
-        _chunk = next;
-        return true;
     }
 
-    public string[] ReadOut(int[] breaks) {
-        throw new NotImplementedException();
-    }
+    public string ReadOut(int count) {
+        int end = _start + count;
+        string s = "";
+        Debug.Assert(_chunks.First != null, "_chunks.First != null");
+        LinkedListNode<string> chunk = _chunks.First;
+        while (end > chunk.Value.Length) {
+            s += chunk.Value[_start..];
+            _start = 0;
+            end -= chunk.Value.Length - _start;
+            Debug.Assert(chunk.Next != null, "chunk.Next != null");
+            chunk = chunk.Next;
+            _chunks.RemoveFirst();
+        }
 
-    // Completes at the same time ReadChunk() returns true
-    public Task NextChunkReadyAsync() {
-        return _waiter.Task;
+        s += chunk.Value[_start..end];
+        _start = end;
+        return s;
     }
 }
